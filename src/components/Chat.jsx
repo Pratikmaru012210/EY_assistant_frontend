@@ -145,7 +145,15 @@ export default function Chat({
     }
   };
 
-  const handleClearData = () => {
+  const handleClearData = async () => {
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    try {
+      await fetch(`${backendUrl}/api/upload`, {
+        method: 'DELETE',
+      });
+    } catch (err) {
+      console.error('Failed to clear backend data:', err);
+    }
     setActiveFile(null);
     setRowCount(0);
     setColumns([]);
