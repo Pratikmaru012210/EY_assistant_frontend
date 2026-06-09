@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-yellow: #FFE600;
+  --color-brand-gold: #CC9900;
+  --color-brand-track: var(--brand-track);
+}
+
+:root {
+  --brand-track: rgba(45, 101, 174, 0.5);
+  /* light mode track background */
+}
+
+.dark {
+  --brand-track: rgba(45, 101, 174, 1);
+  /* dark mode track background */
+}
