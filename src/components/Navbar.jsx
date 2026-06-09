@@ -1,6 +1,7 @@
 import React from 'react';
 import { Bot, BarChart3, HelpCircle, FileSpreadsheet, Settings } from 'lucide-react';
 import { navbarText } from '../static-text/navbar_text';
+import eyLogo from '../assets/EY_logo.png';
 
 export default function Navbar({ activeFile, rowCount }) {
   return (
@@ -10,7 +11,7 @@ export default function Navbar({ activeFile, rowCount }) {
         {/* Left Side: Logo */}
         <div className="flex items-center gap-3">
           <div className="flex items-center justify-center">
-            <img src="/src/assets/EY_logo.png" alt="EY Logo" className="h-10 w-10" />
+            <img src={eyLogo} alt="EY Logo" className="h-10 w-10" />
           </div>
           <div className="flex flex-col">
             <span className="bg-gradient-to-r from-slate-900 to-brand-gold bg-clip-text text-lg font-extrabold tracking-tight text-transparent dark:from-brand-yellow dark:to-brand-gold">
