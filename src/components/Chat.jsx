@@ -12,7 +12,7 @@ import {
   Calendar,
   Clock,
   User,
-  DollarSign,
+  IndianRupee,
   Hash,
   Database,
   FileSpreadsheet,
@@ -20,7 +20,10 @@ import {
   Percent,
   CheckCircle2,
   ArrowRight,
-  HelpCircle
+  HelpCircle,
+  Copy,
+  Check,
+  Download
 } from 'lucide-react';
 
 // Help helper to map column names to visual icons representing their data type
@@ -32,7 +35,7 @@ const getColumnIcon = (columnName) => {
     return <User className="h-3.5 w-3.5 text-brand-gold" />;
   }
   if (name.includes('sales') || name.includes('price') || name.includes('amount') || name.includes('revenue')) {
-    return <DollarSign className="h-3.5 w-3.5 text-emerald-500" />;
+    return <IndianRupee className="h-3.5 w-3.5 text-emerald-500" />;
   }
   if (name.includes('%') || name.includes('discount')) {
     return <Percent className="h-3.5 w-3.5 text-amber-500" />;
@@ -361,6 +364,57 @@ export default function Chat({
 // Subcomponent: Data Response Tabbed Renderer (Charts + Tables + SQL Code)
 function DataResponseCard({ plan, result }) {
   const [activeTab, setActiveTab] = useState('chart'); // 'chart' | 'table' | 'sql'
+  const [copied, setCopied] = useState(false);
+
+  const handleCopySql = () => {
+    const sqlText = plan?.sql || 'SELECT * FROM ?';
+    navigator.clipboard.writeText(sqlText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  const handleExportToExcel = () => {
+    if (!result || result.length === 0) return;
+
+    // Get the headers dynamically
+    const { labelHeader, valueHeader } = parseSqlHeaders(plan?.sql);
+    const rawHeaders = Object.keys(result[0] || {});
+    const displayHeaders = rawHeaders.map(h => {
+      if (h === 'key') return labelHeader;
+      if (h === 'value') return valueHeader;
+      return h;
+    });
+
+    // Create CSV rows
+    const csvContent = [
+      // Header row
+      displayHeaders.join(','),
+      // Data rows
+      ...result.map(row => 
+        rawHeaders.map(headerKey => {
+          let cellValue = row[headerKey] ?? '';
+          // Escape quotes and commas
+          let cellString = String(cellValue).replace(/"/g, '""');
+          if (cellString.includes(',') || cellString.includes('\n') || cellString.includes('"')) {
+            cellString = `"${cellString}"`;
+          }
+          return cellString;
+        }).join(',')
+      )
+    ].join('\n');
+
+    // Create a blob and download it as a .csv file (Excel compatible)
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', `query_result_${Date.now()}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   if (!result || result.length === 0) {
     return (
@@ -373,49 +427,68 @@ function DataResponseCard({ plan, result }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm dark:border-slate-800 dark:bg-slate-900 animate-in fade-in slide-in-from-top-2 duration-300 max-w-2xl">
       {/* Navigation tabs */}
-      <div className="flex border-b border-slate-150 bg-slate-50/60 px-4 dark:border-slate-800 dark:bg-slate-900/40">
+      <div className="flex justify-between items-center border-b border-slate-150 bg-slate-50/60 pr-3 dark:border-slate-800 dark:bg-slate-900/40">
+        <div className="flex px-2">
+          <button
+            onClick={() => setActiveTab('chart')}
+            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'chart'
+              ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+              }`}
+          >
+            <BarChart2 className="h-3.5 w-3.5" />
+            {chatText.tabVisualization}
+          </button>
+          <button
+            onClick={() => setActiveTab('table')}
+            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'table'
+              ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+              }`}
+          >
+            <Table className="h-3.5 w-3.5" />
+            {chatText.tabDataTable}
+          </button>
+          <button
+            onClick={() => setActiveTab('sql')}
+            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'sql'
+              ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
+              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+              }`}
+          >
+            <Terminal className="h-3.5 w-3.5" />
+            {chatText.tabSqlTrace}
+          </button>
+        </div>
         <button
-          onClick={() => setActiveTab('chart')}
-          className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'chart'
-            ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
-            : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
-            }`}
+          onClick={handleExportToExcel}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[10px] font-bold text-slate-500 hover:text-brand-gold hover:bg-slate-100/60 dark:text-slate-400 dark:hover:text-brand-yellow dark:hover:bg-slate-800 transition border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 cursor-pointer shadow-sm focus:outline-none"
+          title="Download query results as CSV (Excel compatible)"
         >
-          <BarChart2 className="h-3.5 w-3.5" />
-          {chatText.tabVisualization}
-        </button>
-        <button
-          onClick={() => setActiveTab('table')}
-          className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'table'
-            ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
-            : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
-            }`}
-        >
-          <Table className="h-3.5 w-3.5" />
-          {chatText.tabDataTable}
-        </button>
-        <button
-          onClick={() => setActiveTab('sql')}
-          className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'sql'
-            ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
-            : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
-            }`}
-        >
-          <Terminal className="h-3.5 w-3.5" />
-          {chatText.tabSqlTrace}
+          <Download className="h-3 w-3 text-slate-400" />
+          Export
         </button>
       </div>
 
       {/* Tab Panels */}
       <div className="p-4">
-        {activeTab === 'chart' && <HorizontalBarChart result={result} />}
-        {activeTab === 'table' && <SimpleDataTable result={result} />}
+        {activeTab === 'chart' && <HorizontalBarChart result={result} sql={plan?.sql} />}
+        {activeTab === 'table' && <SimpleDataTable result={result} sql={plan?.sql} />}
         {activeTab === 'sql' && (
-          <div className="rounded-xl bg-slate-950 p-4 border border-slate-900 font-mono text-xs text-brand-yellow/80 overflow-x-auto select-all">
-            <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-1.5">
+          <div className="relative rounded-xl bg-slate-950 p-4 border border-slate-900 font-mono text-xs text-brand-yellow/80 select-all group">
+            <div className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1.5">
               {chatText.sqlExecutedQueryHeader}
             </div>
-            {plan?.sql || 'SELECT * FROM ?'}
+            <pre className="pr-10 pb-3 overflow-x-auto font-mono whitespace-pre">
+              {plan?.sql || 'SELECT * FROM ?'}
+            </pre>
+            <button
+              onClick={handleCopySql}
+              className="absolute right-3 top-3 p-1.5 rounded-lg bg-slate-900 text-slate-400 hover:text-brand-yellow hover:bg-slate-800 transition border border-slate-800 focus:outline-none cursor-pointer"
+              title="Copy SQL Query"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
           </div>
         )}
       </div>
@@ -423,8 +496,51 @@ function DataResponseCard({ plan, result }) {
   );
 }
 
+// Helper to parse column display headers from SQL alias mappings
+const parseSqlHeaders = (sql) => {
+  let labelHeader = 'Item';
+  let valueHeader = 'Value';
+
+  if (!sql) return { labelHeader, valueHeader };
+
+  try {
+    const keyMatch = sql.match(/SELECT\s+([\s\S]+?)\s+AS\s+\[?key\]?/i);
+    const valueMatch = sql.match(/,\s*([\s\S]+?)\s+AS\s+\[?value\]?/i);
+
+    const cleanHeader = (header) => {
+      let clean = header.trim();
+      const funcMatch = clean.match(/^(SUM|COUNT|AVG|MIN|MAX)\((.*?)\)$/i);
+      if (funcMatch) {
+        const funcName = funcMatch[1].toUpperCase();
+        let inner = funcMatch[2].replace(/[\[\]]/g, '').trim();
+        if (inner === '*') {
+          return funcName === 'COUNT' ? 'Count' : 'Value';
+        }
+        if (funcName === 'SUM') return `Total ${inner}`;
+        if (funcName === 'AVG') return `Average ${inner}`;
+        if (funcName === 'COUNT') return `Count of ${inner}`;
+        if (funcName === 'MAX') return `Max ${inner}`;
+        if (funcName === 'MIN') return `Min ${inner}`;
+        clean = inner;
+      }
+      return clean.replace(/[\[\]]/g, '').trim();
+    };
+
+    if (keyMatch && keyMatch[1]) {
+      labelHeader = cleanHeader(keyMatch[1]);
+    }
+    if (valueMatch && valueMatch[1]) {
+      valueHeader = cleanHeader(valueMatch[1]);
+    }
+  } catch (err) {
+    console.error("Error parsing SQL headers:", err);
+  }
+
+  return { labelHeader, valueHeader };
+};
+
 // Subcomponent: Premium SVG Horizontal Bar Chart Renderer
-function HorizontalBarChart({ result }) {
+function HorizontalBarChart({ result, sql }) {
   // Parse fields dynamically to handle any column names, aliasing them to label & val
   const firstRow = result[0];
   const keys = Object.keys(firstRow);
@@ -439,23 +555,32 @@ function HorizontalBarChart({ result }) {
 
   const maxVal = Math.max(...data.map((d) => d.val), 1);
 
+  // Extract friendly names from the SQL query if possible
+  const { labelHeader, valueHeader } = parseSqlHeaders(sql);
+
   // Formatter helper to display numbers beautifully
   const formatVal = (v) => {
     if (v === undefined || isNaN(v)) return '0';
     if (v % 1 === 0) return v.toLocaleString(); // whole integers
 
-    // Check if the column is representing a ratio/percentage or fractional sum
-    if (valueField.toLowerCase().includes('percent') || valueField.toLowerCase().includes('%')) {
+    const valueName = (valueHeader || '').toLowerCase();
+    if (valueName.includes('percent') || valueName.includes('%')) {
       return `${v.toFixed(2)}%`;
     }
-    if (valueField.toLowerCase().includes('sales') || valueField.toLowerCase().includes('amount') || valueField.toLowerCase().includes('price')) {
-      return `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (valueName.includes('sales') || valueName.includes('amount') || valueName.includes('price')) {
+      return `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
     return v.toFixed(2);
   };
 
   return (
-    <div className="space-y-3 p-2">
+    <div className="max-h-64 overflow-y-auto pr-3 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800 space-y-3 pt-0 px-2 pb-2">
+      {/* Sticky Header Row */}
+      <div className="sticky top-0 bg-white dark:bg-slate-900 z-10 flex justify-between items-center pt-2 pb-2 border-b border-slate-150 dark:border-slate-800 text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">
+        <span>{labelHeader}</span>
+        <span>{valueHeader}</span>
+      </div>
+
       {data.map((item, idx) => {
         const percentWidth = (item.val / maxVal) * 100;
         return (
@@ -478,16 +603,24 @@ function HorizontalBarChart({ result }) {
 }
 
 // Subcomponent: Standard Tabular Data Grid Renderer
-function SimpleDataTable({ result }) {
+function SimpleDataTable({ result, sql }) {
   const headers = Object.keys(result[0] || {});
+  const { labelHeader, valueHeader } = parseSqlHeaders(sql);
+
+  const getHeaderDisplayName = (headerKey) => {
+    if (headerKey === 'key') return labelHeader;
+    if (headerKey === 'value') return valueHeader;
+    return headerKey;
+  };
 
   // Clean formatting helpers for table cells
-  const formatCell = (header, val) => {
+  const formatCell = (headerKey, val) => {
     if (typeof val === 'number') {
-      const h = header.toLowerCase();
+      const displayName = getHeaderDisplayName(headerKey);
+      const h = displayName.toLowerCase();
       if (h.includes('%') || h.includes('percent')) return `${val.toFixed(2)}%`;
       if (h.includes('amount') || h.includes('sales') || h.includes('price')) {
-        return `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        return `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
       }
       return val.toLocaleString();
     }
@@ -495,13 +628,13 @@ function SimpleDataTable({ result }) {
   };
 
   return (
-    <div className="w-full overflow-x-auto border border-slate-100 rounded-xl dark:border-slate-800/60 max-h-64 scrollbar-thin">
+    <div className="w-full overflow-x-auto border border-slate-100 rounded-xl dark:border-slate-800/60 max-h-64 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800">
       <table className="w-full text-left text-xs border-collapse">
-        <thead className="sticky top-0 bg-slate-50 border-b border-slate-150 text-slate-600 font-bold uppercase tracking-wider dark:bg-slate-900 dark:border-slate-800 dark:text-slate-400">
+        <thead className="sticky top-0 bg-slate-50 border-b border-slate-150 text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest dark:bg-slate-900 dark:border-slate-800">
           <tr>
             {headers.map((h, i) => (
               <th key={i} className="py-2.5 px-4">
-                {h}
+                {getHeaderDisplayName(h)}
               </th>
             ))}
           </tr>
