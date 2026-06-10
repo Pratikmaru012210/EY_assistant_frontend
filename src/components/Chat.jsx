@@ -54,6 +54,8 @@ export default function Chat({
   setRowCount,
   columns,
   setColumns,
+  fileUrl,
+  setFileUrl,
 }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -109,7 +111,7 @@ export default function Chat({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ question: textToSend }),
+        body: JSON.stringify({ question: textToSend, fileUrl }),
       });
 
       if (!response.ok) {
@@ -161,6 +163,7 @@ export default function Chat({
     setRowCount(0);
     setColumns([]);
     setMessages([]);
+    setFileUrl(null);
   };
 
   const filteredColumns = columns.filter((col) =>
@@ -185,6 +188,7 @@ export default function Chat({
           setActiveFile={setActiveFile}
           setRowCount={setRowCount}
           setColumns={setColumns}
+          setFileUrl={setFileUrl}
         />
       </div>
     );
@@ -361,10 +365,73 @@ export default function Chat({
   );
 }
 
+// Helper to detect if a query result represents a single KPI value
+const isSingleKPI = (result) => {
+  if (!result || result.length !== 1) return false;
+  const row = result[0];
+  const keys = Object.keys(row);
+  if (keys.length === 1) return true;
+  if (keys.length === 2) {
+    const labelField = keys.find(k => k === 'key') || keys[0];
+    const val = row[labelField];
+    return val === null || val === undefined || val === '' || String(val).toLowerCase() === 'n/a';
+  }
+  return false;
+};
+
+// Subcomponent: Premium Single KPI Metric Card
+function KPICard({ result, sql }) {
+  const row = result[0];
+  const keys = Object.keys(row);
+  const valueField = keys.find(k => k === 'value') || keys.find(k => typeof row[k] === 'number') || keys[0];
+  const val = Number(row[valueField] ?? 0);
+
+  const { valueHeader } = parseSqlHeaders(sql);
+
+  // Formatter helper to display numbers beautifully
+  const formatVal = (v) => {
+    if (v === undefined || isNaN(v)) return '0';
+    
+    const valueName = (valueHeader || '').toLowerCase();
+    if (valueName.includes('percent') || valueName.includes('%')) {
+      return `${v.toFixed(2)}%`;
+    }
+    if (valueName.includes('sales') || valueName.includes('amount') || valueName.includes('price')) {
+      return `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    }
+    
+    if (v % 1 === 0) {
+      return v.toLocaleString(); // whole integers like counts
+    }
+    return v.toFixed(2);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center w-fit mx-auto px-6 py-2.5 text-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900/60 dark:to-slate-950/60 rounded-xl border border-slate-150 dark:border-slate-800/80 my-1 shadow-inner">
+      <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">
+        {valueHeader || 'Metric Total'}
+      </span>
+      <span className="text-lg font-bold text-slate-900 dark:text-slate-100 tracking-tight animate-in zoom-in-95 duration-500">
+        {formatVal(val)}
+      </span>
+    </div>
+  );
+}
+
 // Subcomponent: Data Response Tabbed Renderer (Charts + Tables + SQL Code)
 function DataResponseCard({ plan, result }) {
-  const [activeTab, setActiveTab] = useState('chart'); // 'chart' | 'table' | 'sql'
+  const isSingle = isSingleKPI(result);
+  const [activeTab, setActiveTab] = useState(isSingle ? 'summary' : 'chart'); // 'chart' | 'table' | 'sql' | 'summary'
   const [copied, setCopied] = useState(false);
+
+  // Sync activeTab dynamically if the data shape changes
+  React.useEffect(() => {
+    if (isSingle && activeTab !== 'summary' && activeTab !== 'sql') {
+      setActiveTab('summary');
+    } else if (!isSingle && activeTab === 'summary') {
+      setActiveTab('chart');
+    }
+  }, [isSingle, activeTab]);
 
   const handleCopySql = () => {
     const sqlText = plan?.sql || 'SELECT * FROM ?';
@@ -391,7 +458,7 @@ function DataResponseCard({ plan, result }) {
       // Header row
       displayHeaders.join(','),
       // Data rows
-      ...result.map(row => 
+      ...result.map(row =>
         rawHeaders.map(headerKey => {
           let cellValue = row[headerKey] ?? '';
           // Escape quotes and commas
@@ -429,26 +496,43 @@ function DataResponseCard({ plan, result }) {
       {/* Navigation tabs */}
       <div className="flex justify-between items-center border-b border-slate-150 bg-slate-50/60 pr-3 dark:border-slate-800 dark:bg-slate-900/40">
         <div className="flex px-2">
-          <button
-            onClick={() => setActiveTab('chart')}
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'chart'
-              ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
-              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
-              }`}
-          >
-            <BarChart2 className="h-3.5 w-3.5" />
-            {chatText.tabVisualization}
-          </button>
-          <button
-            onClick={() => setActiveTab('table')}
-            className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'table'
-              ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
-              : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
-              }`}
-          >
-            <Table className="h-3.5 w-3.5" />
-            {chatText.tabDataTable}
-          </button>
+          {isSingle ? (
+            <>
+              <button
+                onClick={() => setActiveTab('summary')}
+                className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'summary'
+                  ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Summary
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setActiveTab('chart')}
+                className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'chart'
+                  ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+              >
+                <BarChart2 className="h-3.5 w-3.5" />
+                {chatText.tabVisualization}
+              </button>
+              <button
+                onClick={() => setActiveTab('table')}
+                className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'table'
+                  ? 'border-brand-yellow text-brand-gold dark:border-brand-yellow dark:text-brand-yellow'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                  }`}
+              >
+                <Table className="h-3.5 w-3.5" />
+                {chatText.tabDataTable}
+              </button>
+            </>
+          )}
           <button
             onClick={() => setActiveTab('sql')}
             className={`flex items-center gap-1.5 py-3 px-3 text-xs font-bold border-b-2 transition ${activeTab === 'sql'
@@ -472,8 +556,16 @@ function DataResponseCard({ plan, result }) {
 
       {/* Tab Panels */}
       <div className="p-4">
-        {activeTab === 'chart' && <HorizontalBarChart result={result} sql={plan?.sql} />}
-        {activeTab === 'table' && <SimpleDataTable result={result} sql={plan?.sql} />}
+        {isSingle ? (
+          <>
+            {activeTab === 'summary' && <KPICard result={result} sql={plan?.sql} />}
+          </>
+        ) : (
+          <>
+            {activeTab === 'chart' && <HorizontalBarChart result={result} sql={plan?.sql} />}
+            {activeTab === 'table' && <SimpleDataTable result={result} sql={plan?.sql} />}
+          </>
+        )}
         {activeTab === 'sql' && (
           <div className="relative rounded-xl bg-slate-950 p-4 border border-slate-900 font-mono text-xs text-brand-yellow/80 select-all group">
             <div className="text-[9px] text-slate-500 uppercase tracking-widest font-bold mb-1.5">
@@ -589,7 +681,7 @@ function HorizontalBarChart({ result, sql }) {
               <span className="truncate max-w-[280px]">{item.label}</span>
               <span className="font-bold text-slate-900 dark:text-slate-100">{formatVal(item.val)}</span>
             </div>
-            <div className="w-full h-3 rounded-full bg-brand-track overflow-hidden relative">
+            <div className="w-full h-2 rounded-full bg-brand-track overflow-hidden relative">
               <div
                 style={{ width: `${percentWidth}%` }}
                 className="h-full bg-gradient-to-r from-brand-yellow to-brand-gold rounded-full transition-all duration-1000 ease-out shadow-sm"

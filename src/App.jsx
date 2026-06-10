@@ -6,6 +6,7 @@ const App = () => {
   const [activeFile, setActiveFile] = useState(null);
   const [rowCount, setRowCount] = useState(0);
   const [columns, setColumns] = useState([]);
+  const [fileUrl, setFileUrl] = useState(null);
 
   useEffect(() => {
     if (!activeFile) return;
@@ -46,6 +47,8 @@ const App = () => {
           setRowCount={setRowCount}
           columns={columns}
           setColumns={setColumns}
+          fileUrl={fileUrl}
+          setFileUrl={setFileUrl}
         />
       </main>
     </div>

@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { UploadCloud, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { uploadZoneText } from '../static-text/upload_zone_text';
 
-export default function UploadZone({ setActiveFile, setRowCount, setColumns }) {
+export default function UploadZone({ setActiveFile, setRowCount, setColumns, setFileUrl }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -65,6 +65,9 @@ export default function UploadZone({ setActiveFile, setRowCount, setColumns }) {
         setActiveFile(file.name);
         setRowCount(result.rows);
         setColumns(result.columns);
+        if (setFileUrl) {
+          setFileUrl(result.fileUrl);
+        }
       } else {
         setError(result.error || uploadZoneText.errorDefaultParse);
       }
