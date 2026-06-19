@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import UploadZone from './UploadZone';
 import { chatText } from '../static-text/chat_text';
 import {
@@ -18,9 +18,7 @@ import {
   FileSpreadsheet,
   Bot,
   Percent,
-  CheckCircle2,
   ArrowRight,
-  HelpCircle,
   Copy,
   Check,
   Download
@@ -61,6 +59,43 @@ export default function Chat({
   const [input, setInput] = useState('');
   const [schemaSearch, setSchemaSearch] = useState('');
   const messagesEndRef = useRef(null);
+  const [suggestions, setSuggestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  // Fetch AI suggestions when columns are loaded/changed
+  useEffect(() => {
+    if (columns && columns.length > 0) {
+      const fetchSuggestions = async () => {
+        setLoadingSuggestions(true);
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        try {
+          const response = await fetch(`${backendUrl}/api/chat/suggestions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ columns, fileUrl }),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.suggestions && Array.isArray(data.suggestions)) {
+              setSuggestions(data.suggestions);
+              setLoadingSuggestions(false);
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("Failed to fetch AI suggestions:", err);
+        }
+        // Fallback
+        setSuggestions(chatText.suggestedPrompts);
+        setLoadingSuggestions(false);
+      };
+      fetchSuggestions();
+    } else {
+      setSuggestions([]);
+    }
+  }, [columns, fileUrl]);
 
   // Initialize welcome message when file is loaded
   useEffect(() => {
@@ -268,18 +303,32 @@ export default function Chat({
           </div>
           {/* flex-1 + overflow-y-auto: fills remaining sidebar height and scrolls on its own */}
           <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800">
-            {chatText.suggestedPrompts.map((promptText, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSendMessage(promptText)}
-                className="w-full text-left text-xs p-3 rounded-xl border border-slate-100 hover:border-brand-yellow/30 hover:bg-brand-yellow/5 transition text-slate-600 hover:text-brand-gold dark:border-slate-800 dark:bg-slate-900/40 dark:hover:bg-slate-800 dark:text-slate-300 dark:hover:text-brand-yellow"
-              >
-                <div className="flex gap-2 items-start">
-                  <ArrowRight className="h-3 w-3 shrink-0 mt-0.5 text-slate-400" />
-                  <span>{promptText}</span>
-                </div>
-              </button>
-            ))}
+            {loadingSuggestions ? (
+              <div className="space-y-2">
+                {[...Array(6)].map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="w-full h-12 rounded-xl border border-slate-100 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/20 animate-pulse flex items-center px-3"
+                  >
+                    <div className="h-3.5 w-3.5 bg-slate-200 dark:bg-slate-800 rounded-full mr-2 shrink-0 animate-pulse" />
+                    <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-5/6 animate-pulse" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              suggestions.map((promptText, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendMessage(promptText)}
+                  className="w-full text-left text-xs p-3 rounded-xl border border-slate-100 hover:border-brand-yellow/30 hover:bg-brand-yellow/5 transition text-slate-600 hover:text-brand-gold dark:border-slate-800 dark:bg-slate-900/40 dark:hover:bg-slate-800 dark:text-slate-300 dark:hover:text-brand-yellow"
+                >
+                  <div className="flex gap-2 items-start">
+                    <ArrowRight className="h-3 w-3 shrink-0 mt-0.5 text-slate-400" />
+                    <span>{promptText}</span>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </div>
       </aside>
@@ -391,7 +440,7 @@ function KPICard({ result, sql }) {
   // Formatter helper to display numbers beautifully
   const formatVal = (v) => {
     if (v === undefined || isNaN(v)) return '0';
-    
+
     const valueName = (valueHeader || '').toLowerCase();
     if (valueName.includes('percent') || valueName.includes('%')) {
       return `${v.toFixed(2)}%`;
@@ -399,7 +448,7 @@ function KPICard({ result, sql }) {
     if (valueName.includes('sales') || valueName.includes('amount') || valueName.includes('price')) {
       return `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     }
-    
+
     if (v % 1 === 0) {
       return v.toLocaleString(); // whole integers like counts
     }
@@ -424,14 +473,6 @@ function DataResponseCard({ plan, result }) {
   const [activeTab, setActiveTab] = useState(isSingle ? 'summary' : 'chart'); // 'chart' | 'table' | 'sql' | 'summary'
   const [copied, setCopied] = useState(false);
 
-  // Sync activeTab dynamically if the data shape changes
-  React.useEffect(() => {
-    if (isSingle && activeTab !== 'summary' && activeTab !== 'sql') {
-      setActiveTab('summary');
-    } else if (!isSingle && activeTab === 'summary') {
-      setActiveTab('chart');
-    }
-  }, [isSingle, activeTab]);
 
   const handleCopySql = () => {
     const sqlText = plan?.sql || 'SELECT * FROM ?';
@@ -604,7 +645,7 @@ const parseSqlHeaders = (sql) => {
       const funcMatch = clean.match(/^(SUM|COUNT|AVG|MIN|MAX)\((.*?)\)$/i);
       if (funcMatch) {
         const funcName = funcMatch[1].toUpperCase();
-        let inner = funcMatch[2].replace(/[\[\]]/g, '').trim();
+        let inner = funcMatch[2].replace(/\[|\]/g, '').trim();
         if (inner === '*') {
           return funcName === 'COUNT' ? 'Count' : 'Value';
         }
@@ -615,7 +656,7 @@ const parseSqlHeaders = (sql) => {
         if (funcName === 'MIN') return `Min ${inner}`;
         clean = inner;
       }
-      return clean.replace(/[\[\]]/g, '').trim();
+      return clean.replace(/\[|\]/g, '').trim();
     };
 
     if (keyMatch && keyMatch[1]) {
