@@ -48,7 +48,7 @@ const App = () => {
             setColumns(cols || Object.keys(rows[0]));
 
             // Silently rehydrate backend RAM in case the server restarted
-            const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+            const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
             await fetch(`${backendUrl}/api/upload/rehydrate`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -75,7 +75,7 @@ const App = () => {
     }
 
     // 2. Clear backend memory
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
     try {
       await fetch(`${backendUrl}/api/upload`, {
         method: 'DELETE',

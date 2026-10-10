@@ -68,7 +68,7 @@ export default function Chat({
     if (columns && columns.length > 0) {
       const fetchSuggestions = async () => {
         setLoadingSuggestions(true);
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
         try {
           const response = await fetch(`${backendUrl}/api/chat/suggestions`, {
             method: 'POST',
@@ -139,7 +139,7 @@ export default function Chat({
     setMessages((prev) => [...prev, userMsg, botMsg]);
     setInput('');
 
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
     try {
       let response = await fetch(`${backendUrl}/api/chat`, {
@@ -212,7 +212,7 @@ export default function Chat({
       if (onClearData) {
         await onClearData();
       } else {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
         try {
           await fetch(`${backendUrl}/api/upload`, {
             method: 'DELETE',

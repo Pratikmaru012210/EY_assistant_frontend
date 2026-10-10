@@ -48,7 +48,7 @@ export default function UploadZone({ setActiveFile, setRowCount, setColumns }) {
     const formData = new FormData();
     formData.append('file', file);
 
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8000';
 
     try {
       const response = await fetch(`${backendUrl}/api/upload`, {
