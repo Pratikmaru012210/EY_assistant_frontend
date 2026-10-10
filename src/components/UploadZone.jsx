@@ -1,8 +1,9 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { UploadCloud, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { uploadZoneText } from '../static-text/upload_zone_text';
+import { saveSheetToIndexedDB } from '../utils/indexedDB';
 
-export default function UploadZone({ setActiveFile, setRowCount, setColumns, setFileUrl }) {
+export default function UploadZone({ setActiveFile, setRowCount, setColumns }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -62,12 +63,22 @@ export default function UploadZone({ setActiveFile, setRowCount, setColumns, set
       const result = await response.json();
 
       if (result.success) {
+        // Save Excel file blob, parsed json, and metadata to IndexedDB
+        try {
+          await saveSheetToIndexedDB({
+            fileBlob: file,
+            jsonData: result.jsonData,
+            fileName: file.name,
+            rowCount: result.rows,
+            columns: result.columns
+          });
+        } catch (dbErr) {
+          console.error("Failed to cache in IndexedDB:", dbErr);
+        }
+
         setActiveFile(file.name);
         setRowCount(result.rows);
         setColumns(result.columns);
-        if (setFileUrl) {
-          setFileUrl(result.fileUrl);
-        }
       } else {
         setError(result.error || uploadZoneText.errorDefaultParse);
       }
@@ -87,8 +98,8 @@ export default function UploadZone({ setActiveFile, setRowCount, setColumns, set
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
         className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-3xl p-12 text-center cursor-pointer transition-all duration-300 ${isDragOver
-            ? 'border-brand-yellow bg-brand-yellow/10 scale-[1.01] dark:border-brand-yellow dark:bg-brand-yellow/10'
-            : 'border-slate-200 hover:border-brand-yellow hover:bg-brand-yellow/5 dark:border-slate-800 dark:hover:border-brand-yellow dark:hover:bg-slate-900/40'
+          ? 'border-brand-yellow bg-brand-yellow/10 scale-[1.01] dark:border-brand-yellow dark:bg-brand-yellow/10'
+          : 'border-slate-200 hover:border-brand-yellow hover:bg-brand-yellow/5 dark:border-slate-800 dark:hover:border-brand-yellow dark:hover:bg-slate-900/40'
           } ${isLoading ? 'pointer-events-none opacity-80' : ''}`}
       >
         <input

@@ -21,8 +21,10 @@ import {
   ArrowRight,
   Copy,
   Check,
-  Download
+  Download,
+  FileJson
 } from 'lucide-react';
+import { getSheetFromIndexedDB } from '../utils/indexedDB';
 
 // Help helper to map column names to visual icons representing their data type
 const getColumnIcon = (columnName) => {
@@ -52,8 +54,7 @@ export default function Chat({
   setRowCount,
   columns,
   setColumns,
-  fileUrl,
-  setFileUrl,
+  onClearData,
 }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -74,7 +75,7 @@ export default function Chat({
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ columns, fileUrl }),
+            body: JSON.stringify({ columns }),
           });
           if (response.ok) {
             const data = await response.json();
@@ -95,7 +96,7 @@ export default function Chat({
     } else {
       setSuggestions([]);
     }
-  }, [columns, fileUrl]);
+  }, [columns]);
 
   // Initialize welcome message when file is loaded
   useEffect(() => {
@@ -141,13 +142,34 @@ export default function Chat({
     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
     try {
-      const response = await fetch(`${backendUrl}/api/chat`, {
+      let response = await fetch(`${backendUrl}/api/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ question: textToSend, fileUrl }),
+        body: JSON.stringify({ question: textToSend }),
       });
+
+      // Self-healing: if backend memory was cold, rehydrate from browser IndexedDB
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        if (errorData.needsRehydrate) {
+          const stored = await getSheetFromIndexedDB();
+          if (stored && stored.jsonData) {
+            await fetch(`${backendUrl}/api/upload/rehydrate`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ jsonData: stored.jsonData }),
+            });
+            // Retry the chat query
+            response = await fetch(`${backendUrl}/api/chat`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ question: textToSend }),
+            });
+          }
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`Server returned error status: ${response.status}`);
@@ -186,19 +208,24 @@ export default function Chat({
   };
 
   const handleClearData = async () => {
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
-    try {
-      await fetch(`${backendUrl}/api/upload`, {
-        method: 'DELETE',
-      });
-    } catch (err) {
-      console.error('Failed to clear backend data:', err);
+    if (window.confirm("Are you sure you want to delete this Excel file and JSON data from your browser memory?")) {
+      if (onClearData) {
+        await onClearData();
+      } else {
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+        try {
+          await fetch(`${backendUrl}/api/upload`, {
+            method: 'DELETE',
+          });
+        } catch (err) {
+          console.error('Failed to clear backend data:', err);
+        }
+        setActiveFile(null);
+        setRowCount(0);
+        setColumns([]);
+        setMessages([]);
+      }
     }
-    setActiveFile(null);
-    setRowCount(0);
-    setColumns([]);
-    setMessages([]);
-    setFileUrl(null);
   };
 
   const filteredColumns = columns.filter((col) =>
@@ -223,7 +250,6 @@ export default function Chat({
           setActiveFile={setActiveFile}
           setRowCount={setRowCount}
           setColumns={setColumns}
-          setFileUrl={setFileUrl}
         />
       </div>
     );
@@ -242,17 +268,72 @@ export default function Chat({
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5 text-emerald-500" />
-              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm truncate max-w-[130px]">
+              <span className="font-bold text-slate-800 dark:text-slate-200 text-sm truncate max-w-[110px]" title={activeFile}>
                 {activeFile}
               </span>
             </div>
-            <button
-              onClick={handleClearData}
-              title={chatText.removeDatabaseTooltip}
-              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition dark:hover:bg-red-950/30"
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={async () => {
+                  try {
+                    const stored = await getSheetFromIndexedDB();
+                    if (!stored || !stored.fileBlob) {
+                      alert('No Excel file found in browser memory.');
+                      return;
+                    }
+                    const url = URL.createObjectURL(stored.fileBlob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = stored.fileName || 'dataset.xlsx';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  } catch (err) {
+                    console.error('Download Excel failed:', err);
+                  }
+                }}
+                title="Download Excel spreadsheet"
+                className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition dark:hover:bg-emerald-950/30"
+              >
+                <FileSpreadsheet className="h-4 w-4" />
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    const stored = await getSheetFromIndexedDB();
+                    if (!stored || !stored.jsonData) {
+                      alert('No JSON data found in browser memory.');
+                      return;
+                    }
+                    const jsonString = JSON.stringify(stored.jsonData, null, 2);
+                    const blob = new Blob([jsonString], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const baseName = (stored.fileName || 'dataset').replace(/\.[^/.]+$/, "");
+                    a.download = `${baseName}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  } catch (err) {
+                    console.error('Download JSON failed:', err);
+                  }
+                }}
+                title="Download parsed JSON data"
+                className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition dark:hover:bg-amber-950/30"
+              >
+                <FileJson className="h-4 w-4" />
+              </button>
+              <button
+                onClick={handleClearData}
+                title={chatText.removeDatabaseTooltip}
+                className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition dark:hover:bg-red-950/30"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <p className="text-xs text-slate-500 mt-1 dark:text-slate-400">
             {rowCount.toLocaleString()} {chatText.transactionsLoadedSuffix}
